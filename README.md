@@ -94,10 +94,5 @@ Les contributions sont les bienvenues ! N'hésitez pas à :
 - `npm run start` : Lance l'application en mode production
 - `npm run lint` : Vérifie le code avec ESLint
 
-## 📄 Licence
-
-Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
-
----
 
 **Développé avec ❤️ pour simplifier vos workflows CI/CD**

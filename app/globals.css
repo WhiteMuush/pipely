@@ -7,7 +7,362 @@
   cursor: none !important;
 }
 
-/* Ultra performance optimizations */
+/* Refined Matrix/Cyberpunk theme - more subdued */
+body {
+  font-family: "Courier New", monospace;
+  background: #000;
+  color: #00ff00;
+  overflow-x: hidden;
+}
+
+/* Subtle cyberpunk glow effects */
+.cyber-glow {
+  text-shadow: 0 0 3px #00ff00;
+}
+
+.cyber-glow-strong {
+  text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00;
+}
+
+.cyber-border {
+  border: 1px solid #00ff00;
+  box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+}
+
+.cyber-border-red {
+  border: 1px solid #ff0040;
+  box-shadow: 0 0 5px rgba(255, 0, 64, 0.3);
+}
+
+.cyber-border-blue {
+  border: 1px solid #0080ff;
+  box-shadow: 0 0 5px rgba(0, 128, 255, 0.3);
+}
+
+/* Refined cyberpunk background effects */
+.cyber-bg {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 15, 0, 0.95) 100%);
+  backdrop-filter: blur(5px);
+}
+
+.cyber-bg-dark {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 8, 0, 0.98) 100%);
+  backdrop-filter: blur(8px);
+}
+
+/* Refined cyberpunk buttons */
+.cyber-btn {
+  background: transparent;
+  border: 1px solid #00ff00;
+  color: #00ff00;
+  padding: 10px 16px;
+  font-family: "Courier New", monospace;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  font-size: 12px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.cyber-btn:hover {
+  background: rgba(0, 255, 0, 0.05);
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+  text-shadow: 0 0 5px #00ff00;
+}
+
+.cyber-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.cyber-btn-primary {
+  background: rgba(0, 255, 0, 0.1);
+  border: 1px solid #00ff00;
+  color: #000;
+  background-color: #00ff00;
+  text-shadow: none;
+}
+
+.cyber-btn-primary:hover {
+  background: #00cc00;
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+}
+
+.cyber-btn-danger {
+  border-color: #ff0040;
+  color: #ff0040;
+}
+
+.cyber-btn-danger:hover {
+  background: rgba(255, 0, 64, 0.05);
+  box-shadow: 0 0 10px rgba(255, 0, 64, 0.3);
+  text-shadow: 0 0 5px #ff0040;
+}
+
+/* Refined cyberpunk inputs */
+.cyber-input {
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid #00ff00;
+  color: #00ff00;
+  padding: 12px;
+  font-family: "Courier New", monospace;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  min-height: 40px;
+}
+
+.cyber-input:focus {
+  outline: none;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+  text-shadow: 0 0 3px #00ff00;
+}
+
+.cyber-input::placeholder {
+  color: rgba(0, 255, 0, 0.5);
+}
+
+/* Refined cyberpunk cards */
+.cyber-card {
+  background: rgba(0, 0, 0, 0.95);
+  border: 1px solid #00ff00;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+  position: relative;
+}
+
+/* Refined cyberpunk text effects */
+.cyber-title {
+  font-family: "Courier New", monospace;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #00ff00;
+  text-shadow: 0 0 5px #00ff00;
+}
+
+.cyber-subtitle {
+  color: rgba(0, 255, 0, 0.7);
+  font-family: "Courier New", monospace;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 11px;
+}
+
+/* Refined cyberpunk navigation */
+.cyber-nav {
+  background: rgba(0, 0, 0, 0.98);
+  border-bottom: 1px solid #00ff00;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+  backdrop-filter: blur(5px);
+}
+
+/* Status indicators */
+.status-online {
+  color: #00ff00;
+  text-shadow: 0 0 5px #00ff00;
+}
+
+.status-warning {
+  color: #ffff00;
+  text-shadow: 0 0 5px #ffff00;
+}
+
+.status-error {
+  color: #ff0040;
+  text-shadow: 0 0 5px #ff0040;
+}
+
+.status-info {
+  color: #0080ff;
+  text-shadow: 0 0 5px #0080ff;
+}
+
+/* Refined animations */
+@keyframes cyber-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.cyber-pulse {
+  animation: cyber-pulse 3s infinite;
+}
+
+@keyframes cyber-slide-in {
+  from {
+    transform: translateX(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.cyber-slide-in {
+  animation: cyber-slide-in 0.3s ease-out;
+}
+
+@keyframes cyber-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cyber-fade-in {
+  animation: cyber-fade-in 0.4s ease-out;
+}
+
+/* Refined scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000;
+  border: 1px solid rgba(0, 255, 0, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #00ff00;
+  box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00cc00;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+/* Selection */
+::selection {
+  background-color: rgba(0, 255, 0, 0.2);
+  color: #00ff00;
+  text-shadow: 0 0 5px #00ff00;
+}
+
+/* Refined badges */
+.cyber-badge {
+  background: rgba(0, 255, 0, 0.1);
+  border: 1px solid #00ff00;
+  color: #00ff00;
+  padding: 4px 8px;
+  font-family: "Courier New", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cyber-badge-warning {
+  background: rgba(255, 255, 0, 0.1);
+  border-color: #ffff00;
+  color: #ffff00;
+}
+
+.cyber-badge-error {
+  background: rgba(255, 0, 64, 0.1);
+  border-color: #ff0040;
+  color: #ff0040;
+}
+
+.cyber-badge-info {
+  background: rgba(0, 128, 255, 0.1);
+  border-color: #0080ff;
+  color: #0080ff;
+}
+
+/* Refined code blocks */
+.cyber-code {
+  background: rgba(0, 0, 0, 0.98);
+  border: 1px solid #00ff00;
+  color: #00ff00;
+  font-family: "Courier New", monospace;
+  padding: 20px;
+  position: relative;
+  overflow: auto;
+}
+
+.cyber-code::before {
+  content: "> YAML OUTPUT";
+  position: absolute;
+  top: -1px;
+  left: 20px;
+  background: #000;
+  color: #00ff00;
+  padding: 0 10px;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+/* Button layout fixes */
+.button-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.button-group-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.button-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.button-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.button-row-4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Refined grid effect - more subtle */
+.cyber-grid {
+  background-image: linear-gradient(rgba(0, 255, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 0, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Performance optimizations */
 .cursor-optimized {
   will-change: transform;
   transform: translate3d(0, 0, 0);
@@ -17,83 +372,10 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Disable all transitions on cursor elements during movement */
 .no-transition * {
   transition: none !important;
 }
 
-/* Custom cursor styles for different states */
-.cursor-pointer {
-  cursor: none !important;
-}
-
-/* Ensure text selection still works */
-::selection {
-  background-color: rgba(34, 197, 94, 0.3);
-  color: white;
-}
-
-/* Custom scrollbar to match theme */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.8);
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(34, 197, 94, 0.6);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(34, 197, 94, 0.8);
-}
-
-/* Hover effects for interactive elements */
-button:hover,
-a:hover,
-input:hover,
-textarea:hover,
-select:hover,
-[role="button"]:hover {
-  position: relative;
-}
-
-button:hover::before,
-a:hover::before,
-[role="button"]:hover::before {
-  content: "";
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  background: linear-gradient(45deg, transparent, rgba(34, 197, 94, 0.1), transparent);
-  border-radius: inherit;
-  z-index: -1;
-  animation: border-glow 2s infinite;
-}
-
-@keyframes border-glow {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-/* Input focus effects */
-input:focus,
-textarea:focus,
-select:focus {
-  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3), 0 0 10px rgba(34, 197, 94, 0.2);
-}
-
-/* Force hardware acceleration */
 .gpu-accelerated {
   transform: translateZ(0);
   will-change: transform;
@@ -102,15 +384,41 @@ select:focus {
   -webkit-perspective: 1000;
 }
 
-/* Optimize animations */
-@media (prefers-reduced-motion: no-preference) {
-  .animate-ping {
-    animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+/* Responsive design improvements */
+@media (max-width: 768px) {
+  .button-row-4 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .button-row-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .cyber-btn {
+    font-size: 11px;
+    padding: 8px 12px;
+    min-height: 36px;
   }
 }
 
+@media (max-width: 480px) {
+  .button-row,
+  .button-row-2,
+  .button-row-3,
+  .button-row-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Reduce motion for accessibility */
 @media (prefers-reduced-motion: reduce) {
-  .animate-ping {
+  .cyber-pulse,
+  .cyber-slide-in,
+  .cyber-fade-in {
     animation: none;
+  }
+
+  * {
+    transition: none !important;
   }
 }

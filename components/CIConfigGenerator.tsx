@@ -2,24 +2,40 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { Github, GitBranch, Play, Copy, Download, RotateCcw, Plus, Trash2, Settings } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import {
+  Github,
+  GitBranch,
+  Play,
+  Copy,
+  Download,
+  RotateCcw,
+  Plus,
+  Trash2,
+  Save,
+  Upload,
+  Eye,
+  Code,
+  Zap,
+  Shield,
+  Terminal,
+  Cpu,
+} from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import RainingLetters from "./RainingLetters"
 import Toast from "./Toast"
 import CustomCursors from "./CustomCursors"
+import TemplateSelector from "./TemplateSelector"
+import YAMLValidator from "./YAMLValidator"
 
 interface Step {
   id: string
   name: string
   type: "run" | "uses"
   content: string
+  condition?: string
+  continueOnError?: boolean
 }
 
 interface Job {
@@ -30,6 +46,12 @@ interface Job {
   steps: Step[]
   cache: boolean
   envVars: { key: string; value: string }[]
+  needs?: string[]
+  timeout?: number
+  strategy?: {
+    matrix?: Record<string, string[]>
+    failFast?: boolean
+  }
 }
 
 interface Trigger {
@@ -38,6 +60,13 @@ interface Trigger {
   tags: boolean
   cron: string
   branches: string[]
+  paths?: string[]
+  workflowDispatch: boolean
+}
+
+interface Secret {
+  key: string
+  description: string
 }
 
 const CIConfigGenerator: React.FC = () => {
@@ -49,9 +78,102 @@ const CIConfigGenerator: React.FC = () => {
     tags: false,
     cron: "",
     branches: ["main"],
+    paths: [],
+    workflowDispatch: false,
   })
+  const [secrets, setSecrets] = useState<Secret[]>([])
   const [yamlOutput, setYamlOutput] = useState("")
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
+  const [savedConfigs, setSavedConfigs] = useState<Array<{ name: string; config: any; date: string }>>([])
+  const [currentConfigName, setCurrentConfigName] = useState("")
+  const [showPreview, setShowPreview] = useState(true)
+
+  // Templates prédéfinis
+  const templates = {
+    "node-ci": {
+      name: "Node.js CI/CD",
+      description: "Pipeline pour applications Node.js avec tests et déploiement",
+      jobs: [
+        {
+          id: "1",
+          name: "build-and-test",
+          runsOn: "ubuntu-latest",
+          steps: [
+            { id: "1", name: "Checkout code", type: "uses" as const, content: "actions/checkout@v4" },
+            {
+              id: "2",
+              name: "Setup Node.js",
+              type: "uses" as const,
+              content: "actions/setup-node@v4\n        with:\n          node-version: '18'",
+            },
+            { id: "3", name: "Install dependencies", type: "run" as const, content: "npm ci" },
+            { id: "4", name: "Run tests", type: "run" as const, content: "npm test" },
+            { id: "5", name: "Build application", type: "run" as const, content: "npm run build" },
+          ],
+          cache: true,
+          envVars: [{ key: "NODE_ENV", value: "production" }],
+        },
+      ],
+    },
+    "docker-build": {
+      name: "Docker Build & Push",
+      description: "Construction et publication d'images Docker",
+      jobs: [
+        {
+          id: "1",
+          name: "docker-build",
+          runsOn: "ubuntu-latest",
+          steps: [
+            { id: "1", name: "Checkout", type: "uses" as const, content: "actions/checkout@v4" },
+            { id: "2", name: "Setup Docker Buildx", type: "uses" as const, content: "docker/setup-buildx-action@v3" },
+            {
+              id: "3",
+              name: "Login to DockerHub",
+              type: "uses" as const,
+              content:
+                "docker/login-action@v3\n        with:\n          username: ${{ secrets.DOCKER_USERNAME }}\n          password: ${{ secrets.DOCKER_PASSWORD }}",
+            },
+            {
+              id: "4",
+              name: "Build and push",
+              type: "uses" as const,
+              content:
+                "docker/build-push-action@v5\n        with:\n          push: true\n          tags: user/app:latest",
+            },
+          ],
+          cache: false,
+          envVars: [],
+        },
+      ],
+    },
+    "python-ci": {
+      name: "Python CI/CD",
+      description: "Pipeline pour applications Python avec pytest",
+      jobs: [
+        {
+          id: "1",
+          name: "test",
+          runsOn: "ubuntu-latest",
+          strategy: {
+            matrix: { "python-version": ["3.8", "3.9", "3.10", "3.11"] },
+          },
+          steps: [
+            { id: "1", name: "Checkout", type: "uses" as const, content: "actions/checkout@v4" },
+            {
+              id: "2",
+              name: "Setup Python",
+              type: "uses" as const,
+              content: "actions/setup-python@v4\n        with:\n          python-version: ${{ matrix.python-version }}",
+            },
+            { id: "3", name: "Install dependencies", type: "run" as const, content: "pip install -r requirements.txt" },
+            { id: "4", name: "Run tests", type: "run" as const, content: "pytest" },
+          ],
+          cache: true,
+          envVars: [],
+        },
+      ],
+    },
+  }
 
   const addJob = () => {
     const newJob: Job = {
@@ -61,6 +183,8 @@ const CIConfigGenerator: React.FC = () => {
       steps: [],
       cache: false,
       envVars: [],
+      needs: [],
+      timeout: 30,
     }
     setJobs([...jobs, newJob])
   }
@@ -79,6 +203,7 @@ const CIConfigGenerator: React.FC = () => {
       name: "New Step",
       type: "run",
       content: "",
+      continueOnError: false,
     }
     updateJob(jobId, {
       steps: [...(jobs.find((j) => j.id === jobId)?.steps || []), newStep],
@@ -100,6 +225,83 @@ const CIConfigGenerator: React.FC = () => {
     }
   }
 
+  const loadTemplate = (templateKey: string) => {
+    const template = templates[templateKey as keyof typeof templates]
+    if (template) {
+      setJobs(template.jobs.map((job) => ({ ...job, id: Date.now().toString() + Math.random() })))
+      setToast({ message: `Template "${template.name}" loaded successfully`, type: "success" })
+    }
+  }
+
+  const saveConfig = () => {
+    if (!currentConfigName.trim()) {
+      setToast({ message: "Please enter a configuration name", type: "error" })
+      return
+    }
+
+    const config = {
+      name: currentConfigName,
+      config: { platform, jobs, triggers, secrets },
+      date: new Date().toISOString(),
+    }
+
+    const existing = savedConfigs.findIndex((c) => c.name === currentConfigName)
+    if (existing >= 0) {
+      const newConfigs = [...savedConfigs]
+      newConfigs[existing] = config
+      setSavedConfigs(newConfigs)
+    } else {
+      setSavedConfigs([...savedConfigs, config])
+    }
+
+    localStorage.setItem("ci-configs", JSON.stringify(savedConfigs))
+    setToast({ message: "Configuration saved successfully", type: "success" })
+  }
+
+  const loadConfig = (configName: string) => {
+    const config = savedConfigs.find((c) => c.name === configName)
+    if (config) {
+      setPlatform(config.config.platform)
+      setJobs(config.config.jobs)
+      setTriggers(config.config.triggers)
+      setSecrets(config.config.secrets || [])
+      setCurrentConfigName(configName)
+      setToast({ message: `Configuration "${configName}" loaded successfully`, type: "success" })
+    }
+  }
+
+  const exportConfig = () => {
+    const config = { platform, jobs, triggers, secrets, yamlOutput }
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `ci-config-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    setToast({ message: "Configuration exported successfully", type: "success" })
+  }
+
+  const importConfig = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const config = JSON.parse(e.target?.result as string)
+          setPlatform(config.platform || "github")
+          setJobs(config.jobs || [])
+          setTriggers(config.triggers || triggers)
+          setSecrets(config.secrets || [])
+          setToast({ message: "Configuration imported successfully", type: "success" })
+        } catch (error) {
+          setToast({ message: "Error importing configuration", type: "error" })
+        }
+      }
+      reader.readAsText(file)
+    }
+  }
+
   const generateYAML = () => {
     if (platform === "github") {
       return generateGitHubActionsYAML()
@@ -116,6 +318,9 @@ const CIConfigGenerator: React.FC = () => {
     if (triggers.push) {
       yaml += "  push:\n"
       yaml += `    branches: [${triggers.branches.map((b) => `"${b}"`).join(", ")}]\n`
+      if (triggers.paths && triggers.paths.length > 0) {
+        yaml += `    paths: [${triggers.paths.map((p) => `"${p}"`).join(", ")}]\n`
+      }
     }
     if (triggers.pullRequest) {
       yaml += "  pull_request:\n"
@@ -128,12 +333,44 @@ const CIConfigGenerator: React.FC = () => {
       yaml += "  schedule:\n"
       yaml += `    - cron: "${triggers.cron}"\n`
     }
+    if (triggers.workflowDispatch) {
+      yaml += "  workflow_dispatch:\n"
+    }
+
+    // Environment variables globales
+    if (secrets.length > 0) {
+      yaml += "\nenv:\n"
+      secrets.forEach((secret) => {
+        yaml += `  ${secret.key}: \${{ secrets.${secret.key} }}\n`
+      })
+    }
 
     yaml += "\njobs:\n"
 
     jobs.forEach((job) => {
       yaml += `  ${job.name}:\n`
       yaml += `    runs-on: ${job.runsOn}\n`
+
+      if (job.timeout) {
+        yaml += `    timeout-minutes: ${job.timeout}\n`
+      }
+
+      if (job.needs && job.needs.length > 0) {
+        yaml += `    needs: [${job.needs.map((n) => `"${n}"`).join(", ")}]\n`
+      }
+
+      if (job.strategy) {
+        yaml += "    strategy:\n"
+        if (job.strategy.matrix) {
+          yaml += "      matrix:\n"
+          Object.entries(job.strategy.matrix).forEach(([key, values]) => {
+            yaml += `        ${key}: [${values.map((v) => `"${v}"`).join(", ")}]\n`
+          })
+        }
+        if (job.strategy.failFast !== undefined) {
+          yaml += `      fail-fast: ${job.strategy.failFast}\n`
+        }
+      }
 
       if (job.dockerImage) {
         yaml += `    container: ${job.dockerImage}\n`
@@ -150,14 +387,22 @@ const CIConfigGenerator: React.FC = () => {
 
       if (job.cache) {
         yaml += "      - name: Cache dependencies\n"
-        yaml += "        uses: actions/cache@v3\n"
+        yaml += "        uses: actions/cache@v4\n"
         yaml += "        with:\n"
         yaml += "          path: ~/.cache\n"
-        yaml += "          key: ${{ runner.os }}-cache\n"
+        yaml += "          key: ${{ runner.os }}-cache-${{ hashFiles('**/package-lock.json') }}\n"
+        yaml += "          restore-keys: |\n"
+        yaml += "            ${{ runner.os }}-cache-\n"
       }
 
       job.steps.forEach((step) => {
         yaml += `      - name: ${step.name}\n`
+        if (step.condition) {
+          yaml += `        if: ${step.condition}\n`
+        }
+        if (step.continueOnError) {
+          yaml += "        continue-on-error: true\n"
+        }
         if (step.type === "uses") {
           yaml += `        uses: ${step.content}\n`
         } else {
@@ -175,7 +420,18 @@ const CIConfigGenerator: React.FC = () => {
   }
 
   const generateGitLabCIYAML = () => {
-    let yaml = "stages:\n"
+    let yaml = "# GitLab CI/CD Pipeline\n\n"
+
+    // Variables globales
+    if (secrets.length > 0) {
+      yaml += "variables:\n"
+      secrets.forEach((secret) => {
+        yaml += `  ${secret.key}: \$${secret.key}\n`
+      })
+      yaml += "\n"
+    }
+
+    yaml += "stages:\n"
     jobs.forEach((job) => {
       yaml += `  - ${job.name}\n`
     })
@@ -189,9 +445,18 @@ const CIConfigGenerator: React.FC = () => {
         yaml += `  image: ${job.dockerImage}\n`
       }
 
+      if (job.timeout) {
+        yaml += `  timeout: ${job.timeout}m\n`
+      }
+
+      if (job.needs && job.needs.length > 0) {
+        yaml += `  needs: [${job.needs.join(", ")}]\n`
+      }
+
       if (job.cache) {
         yaml += "  cache:\n"
         yaml += "    paths:\n"
+        yaml += "      - node_modules/\n"
         yaml += "      - .cache/\n"
       }
 
@@ -202,11 +467,32 @@ const CIConfigGenerator: React.FC = () => {
         })
       }
 
+      // Conditions pour les triggers
+      const rules = []
+      if (triggers.push) {
+        rules.push(`if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "${triggers.branches[0]}"'`)
+      }
+      if (triggers.pullRequest) {
+        rules.push(`if: '$CI_PIPELINE_SOURCE == "merge_request_event"'`)
+      }
+      if (triggers.tags) {
+        rules.push(`if: '$CI_COMMIT_TAG'`)
+      }
+
+      if (rules.length > 0) {
+        yaml += "  rules:\n"
+        rules.forEach((rule) => {
+          yaml += `    - ${rule}\n`
+        })
+      }
+
       yaml += "  script:\n"
       job.steps.forEach((step) => {
         if (step.type === "run") {
           step.content.split("\n").forEach((line) => {
-            yaml += `    - ${line}\n`
+            if (line.trim()) {
+              yaml += `    - ${line.trim()}\n`
+            }
           })
         }
       })
@@ -219,14 +505,21 @@ const CIConfigGenerator: React.FC = () => {
 
   useEffect(() => {
     setYamlOutput(generateYAML())
-  }, [jobs, triggers, platform])
+  }, [jobs, triggers, platform, secrets])
+
+  useEffect(() => {
+    const saved = localStorage.getItem("ci-configs")
+    if (saved) {
+      setSavedConfigs(JSON.parse(saved))
+    }
+  }, [])
 
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(yamlOutput)
-      setToast({ message: "YAML copié dans le presse-papiers!", type: "success" })
+      setToast({ message: "YAML copied to clipboard", type: "success" })
     } catch (err) {
-      setToast({ message: "Erreur lors de la copie", type: "error" })
+      setToast({ message: "Error copying YAML", type: "error" })
     }
   }
 
@@ -239,7 +532,7 @@ const CIConfigGenerator: React.FC = () => {
     a.download = filename
     a.click()
     URL.revokeObjectURL(url)
-    setToast({ message: "Fichier téléchargé!", type: "success" })
+    setToast({ message: "File downloaded successfully", type: "success" })
   }
 
   const resetConfig = () => {
@@ -250,208 +543,345 @@ const CIConfigGenerator: React.FC = () => {
       tags: false,
       cron: "",
       branches: ["main"],
+      paths: [],
+      workflowDispatch: false,
     })
-    setToast({ message: "Configuration réinitialisée", type: "success" })
+    setSecrets([])
+    setCurrentConfigName("")
+    setToast({ message: "Configuration reset", type: "success" })
   }
 
   return (
-    <div className="relative w-full min-h-screen bg-black overflow-hidden">
+    <div className="relative w-full min-h-screen bg-black cyber-grid">
       <CustomCursors />
-      {/* Background Effect - Same as original */}
       <RainingLetters />
 
-      {/* Navigation */}
-      <nav className="relative z-50 bg-black/90 backdrop-blur-sm border-b border-green-500/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <Settings className="h-8 w-8 text-green-400" />
-              <h1 className="text-xl font-bold text-white font-mono tracking-wider">CI CONFIG GENERATOR</h1>
+      {/* Refined Navigation */}
+      <nav className="relative z-50 cyber-nav">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="flex justify-between items-center h-20">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center justify-center w-12 h-12 cyber-border rounded">
+                <Terminal className="h-6 w-6 text-green-400 cyber-glow" />
+              </div>
+              <div className="flex flex-col">
+                <h1 className="cyber-title text-xl">CI/CD Generator</h1>
+                <p className="cyber-subtitle">Pipeline Configuration Tool</p>
+              </div>
+              <div className="cyber-badge">v2.0</div>
             </div>
-            <Button className="bg-green-600 hover:bg-green-500 text-black font-bold border border-green-400">
-              <Github className="h-4 w-4 mr-2" />
-              GitHub
-            </Button>
+            <div className="button-group">
+              <button onClick={() => setShowPreview(!showPreview)} className="cyber-btn">
+                <Eye className="h-4 w-4 mr-2" />
+                {showPreview ? "Hide" : "Show"} Preview
+              </button>
+              <button className="cyber-btn-primary">
+                <Github className="h-4 w-4 mr-2" />
+                Deploy
+              </button>
+            </div>
           </div>
         </div>
       </nav>
 
-      <div className="relative z-40 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="relative z-40 max-w-7xl mx-auto px-6 lg:px-8 py-8">
+        <div className={`grid ${showPreview ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"} gap-8`}>
           {/* Configuration Panel */}
-          <div className="space-y-6">
-            {/* Platform Selection */}
-            <Card className="bg-black/80 backdrop-blur-sm border-2 border-green-500/30 shadow-lg shadow-green-500/10">
-              <CardHeader className="border-b border-green-500/20">
-                <CardTitle className="flex items-center space-x-2 text-green-400 font-mono">
-                  <GitBranch className="h-5 w-5" />
-                  <span>PLATEFORME CI/CD</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <Button
-                    variant={platform === "github" ? "default" : "outline"}
-                    onClick={() => setPlatform("github")}
-                    className={`h-16 flex flex-col items-center space-y-2 font-mono ${
-                      platform === "github"
-                        ? "bg-green-600 text-black hover:bg-green-500 border-green-400"
-                        : "border-green-500/50 text-green-400 hover:bg-green-500/10 hover:border-green-400"
-                    }`}
-                  >
-                    <Github className="h-6 w-6" />
-                    <span>GitHub Actions</span>
-                  </Button>
-                  <Button
-                    variant={platform === "gitlab" ? "default" : "outline"}
-                    onClick={() => setPlatform("gitlab")}
-                    className={`h-16 flex flex-col items-center space-y-2 font-mono ${
-                      platform === "gitlab"
-                        ? "bg-green-600 text-black hover:bg-green-500 border-green-400"
-                        : "border-green-500/50 text-green-400 hover:bg-green-500/10 hover:border-green-400"
-                    }`}
-                  >
-                    <GitBranch className="h-6 w-6" />
-                    <span>GitLab CI</span>
-                  </Button>
+          <div className="space-y-8 cyber-fade-in">
+            {/* Quick Actions */}
+            <div className="cyber-card rounded-lg p-6">
+              <div className="flex items-center space-x-3 mb-6">
+                <Zap className="h-5 w-5 text-green-400 cyber-glow" />
+                <h2 className="cyber-title text-lg">Quick Actions</h2>
+              </div>
+
+              {/* Fixed button layout */}
+              <div className="space-y-4">
+                <div className="button-row-2">
+                  <TemplateSelector onSelectTemplate={loadTemplate} />
+                  <button onClick={saveConfig} className="cyber-btn">
+                    <Save className="h-4 w-4 mr-2" />
+                    Save
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+
+                <div className="button-row-2">
+                  <button onClick={exportConfig} className="cyber-btn">
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </button>
+                  <label className="cursor-pointer">
+                    <button className="cyber-btn w-full">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import
+                    </button>
+                    <input type="file" accept=".json" onChange={importConfig} className="hidden" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <label className="block text-green-400 font-bold mb-2 text-sm uppercase tracking-wider">
+                  Configuration Name
+                </label>
+                <input
+                  placeholder="Enter configuration name..."
+                  value={currentConfigName}
+                  onChange={(e) => setCurrentConfigName(e.target.value)}
+                  className="cyber-input w-full"
+                />
+              </div>
+            </div>
+
+            {/* Platform Selection */}
+            <div className="cyber-card rounded-lg p-6">
+              <div className="flex items-center space-x-3 mb-6">
+                <GitBranch className="h-5 w-5 text-green-400 cyber-glow" />
+                <h2 className="cyber-title text-lg">Platform</h2>
+              </div>
+              <div className="button-row-2">
+                <button
+                  onClick={() => setPlatform("github")}
+                  className={`h-20 flex flex-col items-center justify-center space-y-3 ${
+                    platform === "github" ? "cyber-btn-primary" : "cyber-btn"
+                  }`}
+                >
+                  <Github className="h-6 w-6" />
+                  <span>GitHub Actions</span>
+                </button>
+                <button
+                  onClick={() => setPlatform("gitlab")}
+                  className={`h-20 flex flex-col items-center justify-center space-y-3 ${
+                    platform === "gitlab" ? "cyber-btn-primary" : "cyber-btn"
+                  }`}
+                >
+                  <GitBranch className="h-6 w-6" />
+                  <span>GitLab CI</span>
+                </button>
+              </div>
+            </div>
 
             {/* Triggers Configuration */}
-            <Card className="bg-black/80 backdrop-blur-sm border-2 border-green-500/30 shadow-lg shadow-green-500/10">
-              <CardHeader className="border-b border-green-500/20">
-                <CardTitle className="flex items-center space-x-2 text-green-400 font-mono">
-                  <Play className="h-5 w-5" />
-                  <span>DÉCLENCHEURS</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-white font-mono">Push</Label>
-                  <Switch
-                    checked={triggers.push}
-                    onCheckedChange={(checked) => setTriggers({ ...triggers, push: checked })}
-                    className="data-[state=checked]:bg-green-600"
-                  />
+            <div className="cyber-card rounded-lg p-6">
+              <div className="flex items-center space-x-3 mb-6">
+                <Play className="h-5 w-5 text-green-400 cyber-glow" />
+                <h2 className="cyber-title text-lg">Triggers</h2>
+              </div>
+              <div className="space-y-4">
+                <div className="button-row-2">
+                  <div className="flex items-center justify-between p-4 cyber-border rounded">
+                    <label className="text-green-400 font-bold text-sm uppercase">Push Events</label>
+                    <Switch
+                      checked={triggers.push}
+                      onCheckedChange={(checked) => setTriggers({ ...triggers, push: checked })}
+                      className="data-[state=checked]:bg-green-600"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 cyber-border rounded">
+                    <label className="text-green-400 font-bold text-sm uppercase">Pull Requests</label>
+                    <Switch
+                      checked={triggers.pullRequest}
+                      onCheckedChange={(checked) => setTriggers({ ...triggers, pullRequest: checked })}
+                      className="data-[state=checked]:bg-green-600"
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-white font-mono">Pull Request</Label>
-                  <Switch
-                    checked={triggers.pullRequest}
-                    onCheckedChange={(checked) => setTriggers({ ...triggers, pullRequest: checked })}
-                    className="data-[state=checked]:bg-green-600"
-                  />
+
+                <div className="button-row-2">
+                  <div className="flex items-center justify-between p-4 cyber-border rounded">
+                    <label className="text-green-400 font-bold text-sm uppercase">Tag Releases</label>
+                    <Switch
+                      checked={triggers.tags}
+                      onCheckedChange={(checked) => setTriggers({ ...triggers, tags: checked })}
+                      className="data-[state=checked]:bg-green-600"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 cyber-border rounded">
+                    <label className="text-green-400 font-bold text-sm uppercase">Manual Trigger</label>
+                    <Switch
+                      checked={triggers.workflowDispatch}
+                      onCheckedChange={(checked) => setTriggers({ ...triggers, workflowDispatch: checked })}
+                      className="data-[state=checked]:bg-green-600"
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-white font-mono">Tags</Label>
-                  <Switch
-                    checked={triggers.tags}
-                    onCheckedChange={(checked) => setTriggers({ ...triggers, tags: checked })}
-                    className="data-[state=checked]:bg-green-600"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-white font-mono">Cron Schedule</Label>
-                  <Input
-                    placeholder="0 0 * * *"
+              </div>
+
+              <div className="space-y-4 mt-6">
+                <div>
+                  <label className="block text-green-400 font-bold mb-2 text-sm uppercase tracking-wider">
+                    Cron Schedule
+                  </label>
+                  <input
+                    placeholder="0 0 * * * (daily at midnight)"
                     value={triggers.cron}
                     onChange={(e) => setTriggers({ ...triggers, cron: e.target.value })}
-                    className="bg-black/60 border-green-500/50 text-white font-mono focus:border-green-400 focus:ring-green-400/20"
+                    className="cyber-input w-full"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-white font-mono">Branches</Label>
-                  <Input
-                    placeholder="main, develop"
+                <div>
+                  <label className="block text-green-400 font-bold mb-2 text-sm uppercase tracking-wider">
+                    Target Branches
+                  </label>
+                  <input
+                    placeholder="main, develop, feature/*"
                     value={triggers.branches.join(", ")}
                     onChange={(e) =>
                       setTriggers({ ...triggers, branches: e.target.value.split(",").map((b) => b.trim()) })
                     }
-                    className="bg-black/60 border-green-500/50 text-white font-mono focus:border-green-400 focus:ring-green-400/20"
+                    className="cyber-input w-full"
                   />
                 </div>
-              </CardContent>
-            </Card>
+                <div>
+                  <label className="block text-green-400 font-bold mb-2 text-sm uppercase tracking-wider">
+                    Path Filters (Optional)
+                  </label>
+                  <input
+                    placeholder="src/**, tests/**, docs/**"
+                    value={triggers.paths?.join(", ") || ""}
+                    onChange={(e) =>
+                      setTriggers({
+                        ...triggers,
+                        paths: e.target.value
+                          .split(",")
+                          .map((p) => p.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                    className="cyber-input w-full"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Secrets Management */}
+            <div className="cyber-card rounded-lg p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <Shield className="h-5 w-5 text-green-400 cyber-glow" />
+                  <h2 className="cyber-title text-lg">Secrets & Environment Variables</h2>
+                </div>
+                <button onClick={() => setSecrets([...secrets, { key: "", description: "" }])} className="cyber-btn">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Secret
+                </button>
+              </div>
+              {secrets.length === 0 ? (
+                <div className="text-center py-12">
+                  <Shield className="h-12 w-12 text-green-400 mx-auto mb-4 cyber-glow" />
+                  <p className="text-green-400 font-bold uppercase tracking-wider">No secrets configured</p>
+                  <p className="text-green-400/60 text-sm mt-1">
+                    Add environment variables and secrets for your pipeline
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {secrets.map((secret, index) => (
+                    <div key={index} className="grid grid-cols-3 gap-3 items-center">
+                      <input
+                        placeholder="SECRET_NAME"
+                        value={secret.key}
+                        onChange={(e) => {
+                          const newSecrets = [...secrets]
+                          newSecrets[index].key = e.target.value.toUpperCase()
+                          setSecrets(newSecrets)
+                        }}
+                        className="cyber-input"
+                      />
+                      <input
+                        placeholder="Description"
+                        value={secret.description}
+                        onChange={(e) => {
+                          const newSecrets = [...secrets]
+                          newSecrets[index].description = e.target.value
+                          setSecrets(newSecrets)
+                        }}
+                        className="cyber-input"
+                      />
+                      <button
+                        onClick={() => setSecrets(secrets.filter((_, i) => i !== index))}
+                        className="cyber-btn-danger"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Jobs Configuration */}
-            <Card className="bg-black/80 backdrop-blur-sm border-2 border-green-500/30 shadow-lg shadow-green-500/10">
-              <CardHeader className="border-b border-green-500/20">
-                <CardTitle className="flex items-center justify-between text-green-400 font-mono">
-                  <span>JOBS CONFIGURATION</span>
-                  <Button onClick={addJob} size="sm" className="bg-green-600 hover:bg-green-500 text-black font-bold">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Ajouter Job
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                {jobs.length === 0 ? (
-                  <p className="text-green-400/60 text-center py-8 font-mono">{"> Aucun job configuré"}</p>
-                ) : (
-                  <div className="space-y-4">
-                    {jobs.map((job) => (
-                      <JobConfiguration
-                        key={job.id}
-                        job={job}
-                        onUpdate={(updates) => updateJob(job.id, updates)}
-                        onRemove={() => removeJob(job.id)}
-                        onAddStep={() => addStep(job.id)}
-                        onUpdateStep={(stepId, updates) => updateStep(job.id, stepId, updates)}
-                        onRemoveStep={(stepId) => removeStep(job.id, stepId)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <div className="cyber-card rounded-lg p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <Cpu className="h-5 w-5 text-green-400 cyber-glow" />
+                  <h2 className="cyber-title text-lg">Pipeline Jobs</h2>
+                </div>
+                <button onClick={addJob} className="cyber-btn">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Job
+                </button>
+              </div>
+              {jobs.length === 0 ? (
+                <div className="text-center py-12">
+                  <Code className="h-12 w-12 text-green-400 mx-auto mb-4 cyber-glow" />
+                  <p className="text-green-400 font-bold uppercase tracking-wider">No jobs configured</p>
+                  <p className="text-green-400/60 text-sm mt-1">Create jobs to define your CI/CD pipeline steps</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {jobs.map((job) => (
+                    <JobConfiguration
+                      key={job.id}
+                      job={job}
+                      jobs={jobs}
+                      onUpdate={(updates) => updateJob(job.id, updates)}
+                      onRemove={() => removeJob(job.id)}
+                      onAddStep={() => addStep(job.id)}
+                      onUpdateStep={(stepId, updates) => updateStep(job.id, stepId, updates)}
+                      onRemoveStep={(stepId) => removeStep(job.id, stepId)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* YAML Preview */}
-          <div className="space-y-6">
-            <Card className="bg-black/80 backdrop-blur-sm border-2 border-green-500/30 shadow-lg shadow-green-500/10">
-              <CardHeader className="border-b border-green-500/20">
-                <CardTitle className="flex items-center justify-between text-green-400 font-mono">
-                  <span>APERÇU YAML</span>
-                  <div className="flex space-x-2">
-                    <Button
-                      onClick={copyToClipboard}
-                      size="sm"
-                      className="border-green-500/50 text-green-400 hover:bg-green-500/10 hover:border-green-400 bg-transparent"
-                    >
+          {showPreview && (
+            <div className="space-y-8 cyber-slide-in">
+              <div className="cyber-card rounded-lg p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-3">
+                    <Code className="h-5 w-5 text-green-400 cyber-glow" />
+                    <h2 className="cyber-title text-lg">YAML Configuration</h2>
+                  </div>
+                  <div className="button-group">
+                    <button onClick={copyToClipboard} className="cyber-btn">
                       <Copy className="h-4 w-4 mr-2" />
-                      Copier
-                    </Button>
-                    <Button
-                      onClick={downloadYAML}
-                      size="sm"
-                      className="border-green-500/50 text-green-400 hover:bg-green-500/10 hover:border-green-400 bg-transparent"
-                    >
+                      Copy
+                    </button>
+                    <button onClick={downloadYAML} className="cyber-btn">
                       <Download className="h-4 w-4 mr-2" />
-                      Télécharger
-                    </Button>
-                    <Button
-                      onClick={resetConfig}
-                      size="sm"
-                      className="border-green-500/50 text-green-400 hover:bg-green-500/10 hover:border-green-400 bg-transparent"
-                    >
+                      Download
+                    </button>
+                    <button onClick={resetConfig} className="cyber-btn-danger">
                       <RotateCcw className="h-4 w-4 mr-2" />
                       Reset
-                    </Button>
+                    </button>
                   </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="bg-black/90 p-4 rounded-lg border border-green-500/30 max-h-96 overflow-auto">
-                  <pre className="text-sm font-mono">
+                </div>
+                <YAMLValidator yamlContent={yamlOutput} />
+                <div className="cyber-code mt-6 max-h-96 overflow-auto">
+                  <pre className="text-sm leading-relaxed">
                     <code className="text-green-400">
-                      {yamlOutput || "# Configurez vos jobs pour voir le YAML généré"}
+                      {yamlOutput || "# Configure your jobs to see the generated YAML"}
                     </code>
                   </pre>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -462,6 +892,7 @@ const CIConfigGenerator: React.FC = () => {
 
 interface JobConfigurationProps {
   job: Job
+  jobs: Job[]
   onUpdate: (updates: Partial<Job>) => void
   onRemove: () => void
   onAddStep: () => void
@@ -471,6 +902,7 @@ interface JobConfigurationProps {
 
 const JobConfiguration: React.FC<JobConfigurationProps> = ({
   job,
+  jobs,
   onUpdate,
   onRemove,
   onAddStep,
@@ -478,53 +910,96 @@ const JobConfiguration: React.FC<JobConfigurationProps> = ({
   onRemoveStep,
 }) => {
   return (
-    <Card className="bg-black/60 border border-green-500/40 shadow-md shadow-green-500/5">
-      <CardHeader className="border-b border-green-500/20">
-        <div className="flex items-center justify-between">
-          <Input
-            value={job.name}
-            onChange={(e) => onUpdate({ name: e.target.value })}
-            className="bg-black/60 border-green-500/50 text-white font-mono font-semibold focus:border-green-400 focus:ring-green-400/20"
-          />
-          <Button onClick={onRemove} size="sm" className="bg-red-600/80 hover:bg-red-500 text-white border-red-500/50">
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-white font-mono">Runs On</Label>
+    <div className="cyber-border rounded-lg p-4 bg-black/50">
+      <div className="flex items-center justify-between mb-4">
+        <input
+          value={job.name}
+          onChange={(e) => onUpdate({ name: e.target.value })}
+          className="cyber-input flex-1 mr-4 font-bold text-lg"
+        />
+        <button onClick={onRemove} className="cyber-btn-danger">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="space-y-4">
+        <div className="button-row-2">
+          <div>
+            <label className="block text-green-400 font-bold mb-2 text-sm uppercase tracking-wider">
+              Runner Environment
+            </label>
             <Select value={job.runsOn} onValueChange={(value) => onUpdate({ runsOn: value })}>
-              <SelectTrigger className="bg-black/60 border-green-500/50 text-white font-mono focus:border-green-400 focus:ring-green-400/20">
+              <SelectTrigger className="cyber-input">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/50">
-                <SelectItem value="ubuntu-latest" className="text-white hover:bg-green-500/20">
+              <SelectContent className="bg-black border-green-500">
+                <SelectItem value="ubuntu-latest" className="text-green-400 hover:bg-green-900/20">
                   ubuntu-latest
                 </SelectItem>
-                <SelectItem value="windows-latest" className="text-white hover:bg-green-500/20">
+                <SelectItem value="ubuntu-20.04" className="text-green-400 hover:bg-green-900/20">
+                  ubuntu-20.04
+                </SelectItem>
+                <SelectItem value="windows-latest" className="text-green-400 hover:bg-green-900/20">
                   windows-latest
                 </SelectItem>
-                <SelectItem value="macos-latest" className="text-white hover:bg-green-500/20">
+                <SelectItem value="macos-latest" className="text-green-400 hover:bg-green-900/20">
                   macos-latest
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label className="text-white font-mono">Docker Image</Label>
-            <Input
-              placeholder="node:18"
+          <div>
+            <label className="block text-green-400 font-bold mb-2 text-sm uppercase tracking-wider">
+              Docker Image (Optional)
+            </label>
+            <input
+              placeholder="node:18, python:3.11, nginx:alpine"
               value={job.dockerImage || ""}
               onChange={(e) => onUpdate({ dockerImage: e.target.value })}
-              className="bg-black/60 border-green-500/50 text-white font-mono focus:border-green-400 focus:ring-green-400/20"
+              className="cyber-input w-full"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <Label className="text-white font-mono">Cache</Label>
+        <div className="button-row-2">
+          <div>
+            <label className="block text-green-400 font-bold mb-2 text-sm uppercase tracking-wider">
+              Timeout (minutes)
+            </label>
+            <input
+              type="number"
+              placeholder="30"
+              value={job.timeout || ""}
+              onChange={(e) => onUpdate({ timeout: Number.parseInt(e.target.value) || undefined })}
+              className="cyber-input w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-green-400 font-bold mb-2 text-sm uppercase tracking-wider">Dependencies</label>
+            <Select
+              value={job.needs?.[0] || "no-dependency"}
+              onValueChange={(value) => onUpdate({ needs: value === "no-dependency" ? [] : [value] })}
+            >
+              <SelectTrigger className="cyber-input">
+                <SelectValue placeholder="No dependencies" />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500">
+                <SelectItem value="no-dependency" className="text-green-400 hover:bg-green-900/20">
+                  No dependencies
+                </SelectItem>
+                {jobs
+                  .filter((j) => j.id !== job.id)
+                  .map((j) => (
+                    <SelectItem key={j.id} value={j.name} className="text-green-400 hover:bg-green-900/20">
+                      {j.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between p-4 cyber-border rounded">
+          <label className="text-green-400 font-bold text-sm uppercase tracking-wider">Enable Caching</label>
           <Switch
             checked={job.cache}
             onCheckedChange={(checked) => onUpdate({ cache: checked })}
@@ -533,32 +1008,34 @@ const JobConfiguration: React.FC<JobConfigurationProps> = ({
         </div>
 
         <Tabs defaultValue="steps" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-black/60 border border-green-500/30">
+          <TabsList className="grid w-full grid-cols-3 bg-black/60 cyber-border">
             <TabsTrigger
               value="steps"
-              className="text-white data-[state=active]:bg-green-600 data-[state=active]:text-black font-mono"
+              className="text-green-400 data-[state=active]:bg-green-600 data-[state=active]:text-black font-bold uppercase"
             >
               Steps
             </TabsTrigger>
             <TabsTrigger
               value="env"
-              className="text-white data-[state=active]:bg-green-600 data-[state=active]:text-black font-mono"
+              className="text-green-400 data-[state=active]:bg-green-600 data-[state=active]:text-black font-bold uppercase"
             >
-              Variables
+              Environment
+            </TabsTrigger>
+            <TabsTrigger
+              value="matrix"
+              className="text-green-400 data-[state=active]:bg-green-600 data-[state=active]:text-black font-bold uppercase"
+            >
+              Matrix
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="steps" className="space-y-4 mt-4">
+          <TabsContent value="steps" className="space-y-4 mt-6">
             <div className="flex justify-between items-center">
-              <Label className="text-white font-mono">Steps</Label>
-              <Button
-                onClick={onAddStep}
-                size="sm"
-                className="border-green-500/50 text-green-400 hover:bg-green-500/10 hover:border-green-400 bg-transparent"
-              >
+              <label className="text-green-400 font-bold text-sm uppercase tracking-wider">Pipeline Steps</label>
+              <button onClick={onAddStep} className="cyber-btn">
                 <Plus className="h-4 w-4 mr-2" />
-                Ajouter Step
-              </Button>
+                Add Step
+              </button>
             </div>
             {job.steps.map((step) => (
               <StepConfiguration
@@ -570,21 +1047,21 @@ const JobConfiguration: React.FC<JobConfigurationProps> = ({
             ))}
           </TabsContent>
 
-          <TabsContent value="env" className="space-y-4 mt-4">
-            <Label className="text-white font-mono">Variables d'environnement</Label>
+          <TabsContent value="env" className="space-y-4 mt-6">
+            <label className="text-green-400 font-bold text-sm uppercase tracking-wider">Environment Variables</label>
             {job.envVars.map((env, index) => (
-              <div key={index} className="grid grid-cols-2 gap-2">
-                <Input
-                  placeholder="KEY"
+              <div key={index} className="grid grid-cols-3 gap-3">
+                <input
+                  placeholder="VARIABLE_NAME"
                   value={env.key}
                   onChange={(e) => {
                     const newEnvVars = [...job.envVars]
                     newEnvVars[index].key = e.target.value
                     onUpdate({ envVars: newEnvVars })
                   }}
-                  className="bg-black/60 border-green-500/50 text-white font-mono focus:border-green-400 focus:ring-green-400/20"
+                  className="cyber-input"
                 />
-                <Input
+                <input
                   placeholder="value"
                   value={env.value}
                   onChange={(e) => {
@@ -592,22 +1069,49 @@ const JobConfiguration: React.FC<JobConfigurationProps> = ({
                     newEnvVars[index].value = e.target.value
                     onUpdate({ envVars: newEnvVars })
                   }}
-                  className="bg-black/60 border-green-500/50 text-white font-mono focus:border-green-400 focus:ring-green-400/20"
+                  className="cyber-input"
                 />
+                <button
+                  onClick={() => onUpdate({ envVars: job.envVars.filter((_, i) => i !== index) })}
+                  className="cyber-btn-danger"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             ))}
-            <Button
+            <button
               onClick={() => onUpdate({ envVars: [...job.envVars, { key: "", value: "" }] })}
-              size="sm"
-              className="border-green-500/50 text-green-400 hover:bg-green-500/10 hover:border-green-400 bg-transparent"
+              className="cyber-btn"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Ajouter Variable
-            </Button>
+              Add Variable
+            </button>
+          </TabsContent>
+
+          <TabsContent value="matrix" className="space-y-4 mt-6">
+            <label className="text-green-400 font-bold text-sm uppercase tracking-wider">Matrix Strategy</label>
+            <div className="space-y-4">
+              <div className="button-row-2">
+                <input placeholder="node-version" className="cyber-input" />
+                <input placeholder="16, 18, 20" className="cyber-input" />
+              </div>
+              <div className="flex items-center justify-between p-4 cyber-border rounded">
+                <label className="text-green-400 font-bold text-sm uppercase tracking-wider">Fail Fast</label>
+                <Switch
+                  checked={job.strategy?.failFast || false}
+                  onCheckedChange={(checked) =>
+                    onUpdate({
+                      strategy: { ...job.strategy, failFast: checked },
+                    })
+                  }
+                  className="data-[state=checked]:bg-green-600"
+                />
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
@@ -619,45 +1123,64 @@ interface StepConfigurationProps {
 
 const StepConfiguration: React.FC<StepConfigurationProps> = ({ step, onUpdate, onRemove }) => {
   return (
-    <Card className="bg-black/40 border border-green-500/30">
-      <CardContent className="pt-4 space-y-3">
+    <div className="cyber-border rounded-lg p-4 bg-black/30">
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Input
-            placeholder="Nom du step"
+          <input
+            placeholder="Step name"
             value={step.name}
             onChange={(e) => onUpdate({ name: e.target.value })}
-            className="bg-black/60 border-green-500/50 text-white font-mono flex-1 mr-2 focus:border-green-400 focus:ring-green-400/20"
+            className="cyber-input flex-1 mr-3 font-bold"
           />
           <Select value={step.type} onValueChange={(value: "run" | "uses") => onUpdate({ type: value })}>
-            <SelectTrigger className="w-24 bg-black/60 border-green-500/50 text-white font-mono focus:border-green-400 focus:ring-green-400/20">
+            <SelectTrigger className="w-24 cyber-input">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-black border-green-500/50">
-              <SelectItem value="run" className="text-white hover:bg-green-500/20">
+            <SelectContent className="bg-black border-green-500">
+              <SelectItem value="run" className="text-green-400 hover:bg-green-900/20">
                 run
               </SelectItem>
-              <SelectItem value="uses" className="text-white hover:bg-green-500/20">
+              <SelectItem value="uses" className="text-green-400 hover:bg-green-900/20">
                 uses
               </SelectItem>
             </SelectContent>
           </Select>
-          <Button
-            onClick={onRemove}
-            size="sm"
-            className="ml-2 bg-red-600/80 hover:bg-red-500 text-white border-red-500/50"
-          >
+          <button onClick={onRemove} className="ml-3 cyber-btn-danger">
             <Trash2 className="h-4 w-4" />
-          </Button>
+          </button>
         </div>
-        <Textarea
-          placeholder={step.type === "run" ? 'echo "Hello World"' : "actions/checkout@v3"}
+
+        <textarea
+          placeholder={step.type === "run" ? 'echo "Hello World"\nnpm install\nnpm test' : "actions/checkout@v4"}
           value={step.content}
           onChange={(e) => onUpdate({ content: e.target.value })}
-          className="bg-black/60 border-green-500/50 text-white font-mono text-sm focus:border-green-400 focus:ring-green-400/20"
-          rows={3}
+          className="cyber-input w-full text-sm leading-relaxed"
+          rows={4}
         />
-      </CardContent>
-    </Card>
+
+        <div className="button-row-2">
+          <div>
+            <label className="block text-green-400 font-bold mb-2 text-sm uppercase tracking-wider">
+              Condition (if)
+            </label>
+            <input
+              placeholder="success() && github.ref == 'refs/heads/main'"
+              value={step.condition || ""}
+              onChange={(e) => onUpdate({ condition: e.target.value })}
+              className="cyber-input w-full text-sm"
+            />
+          </div>
+          <div className="flex items-center justify-between pt-6">
+            <label className="text-green-400 font-bold text-sm uppercase tracking-wider">Continue on Error</label>
+            <Switch
+              checked={step.continueOnError || false}
+              onCheckedChange={(checked) => onUpdate({ continueOnError: checked })}
+              className="data-[state=checked]:bg-green-600"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
